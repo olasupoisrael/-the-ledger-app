@@ -28,6 +28,77 @@ function esc(str) {
   return d.innerHTML;
 }
 
+// ===== CUSTOM DIALOGS (replace native confirm/prompt/alert) =====
+
+function showConfirmModal({ title, message, confirmLabel = 'Confirm', danger = false }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3 class="modal-title display">${esc(title)}</h3>
+        <p style="color:var(--ink-soft);font-size:15px;line-height:1.5;margin:0;">${esc(message)}</p>
+        <div class="modal-actions">
+          <button class="btn" id="confirm-cancel">Cancel</button>
+          <button class="btn ${danger ? '' : 'btn-primary'}" id="confirm-ok" ${danger ? 'style="background:var(--coral);color:white;box-shadow:var(--shadow-coral);"' : ''}>${esc(confirmLabel)}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const cleanup = (result) => { overlay.remove(); resolve(result); };
+    document.getElementById('confirm-cancel').onclick = () => cleanup(false);
+    document.getElementById('confirm-ok').onclick = () => cleanup(true);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
+  });
+}
+
+function showPromptModal({ title, message, placeholder = '', optional = true }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3 class="modal-title display">${esc(title)}</h3>
+        ${message ? `<p style="color:var(--ink-soft);font-size:14px;margin:0 0 14px;">${esc(message)}</p>` : ''}
+        <div class="field" style="margin-bottom:0;">
+          <textarea id="prompt-input" rows="3" placeholder="${esc(placeholder)}"></textarea>
+        </div>
+        <div class="modal-actions">
+          ${optional ? `<button class="btn" id="prompt-skip">Skip</button>` : `<button class="btn" id="prompt-skip">Cancel</button>`}
+          <button class="btn btn-primary" id="prompt-ok">Save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('prompt-input').focus();
+    const cleanup = (result) => { overlay.remove(); resolve(result); };
+    document.getElementById('prompt-skip').onclick = () => cleanup(optional ? '' : null);
+    document.getElementById('prompt-ok').onclick = () => cleanup(document.getElementById('prompt-input').value.trim());
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(optional ? '' : null); };
+  });
+}
+
+function showAlertModal({ title = 'Something went wrong', message }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3 class="modal-title display">${esc(title)}</h3>
+        <p style="color:var(--ink-soft);font-size:15px;line-height:1.5;margin:0;">${esc(message)}</p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="alert-ok">Got it</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const cleanup = () => { overlay.remove(); resolve(); };
+    document.getElementById('alert-ok').onclick = cleanup;
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+  });
+}
+
+
 function timeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
   if (diff < 60) return 'just now';
@@ -117,7 +188,7 @@ async function updateStreak() {
 
 function render() {
   if (state.loading) {
-    app.innerHTML = `<div class="loading-screen serif">Loading the ledger…</div>`;
+    app.innerHTML = `<div class="loading-screen display">Loading your streak…</div>`;
     return;
   }
   if (!state.user) {
@@ -131,8 +202,8 @@ function renderAuth() {
   const isLogin = state.authMode === 'login';
   app.innerHTML = `
     <div class="auth-wrap">
-      <h1 class="auth-title serif">The Ledger</h1>
-      <p class="auth-sub">A public record of what you said you'd do — and whether you did it. No hiding, no editing history.</p>
+      <h1 class="auth-title display">Streak</h1>
+      <p class="auth-sub">Say what you'll do today, then show up. No hiding, no editing history — just an honest streak.</p>
       <div id="auth-error"></div>
       <form id="auth-form">
         ${!isLogin ? `
@@ -208,7 +279,7 @@ function renderApp() {
   app.innerHTML = `
     <div class="site-header">
       <div>
-        <h1 class="site-title serif">The Ledger<span>${esc(state.profile ? state.profile.display_name : '')}</span></h1>
+        <h1 class="site-title display">Streak<span>${esc(state.profile ? state.profile.display_name : '')}</span></h1>
       </div>
       <div class="header-right">
         <div class="streak-badge">
@@ -264,7 +335,7 @@ async function renderFeed() {
       </div>
     </div>
     <div class="feed-filters" id="feed-filters"></div>
-    <div id="feed-list"><div class="empty-state serif">Loading entries&hellip;</div></div>
+    <div id="feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
   `;
 
   const filters = document.getElementById('feed-filters');
@@ -307,7 +378,7 @@ async function renderFeed() {
     } else {
       btn.disabled = false;
       btn.textContent = 'Post';
-      alert('Could not post: ' + error.message);
+      await showAlertModal({ title: 'Could not post', message: error.message });
     }
   };
 
@@ -332,7 +403,7 @@ async function loadFeedEntries() {
   }
 
   if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="serif">Nothing here yet</div>Be the first to post a commitment.</div>`;
+    list.innerHTML = `<div class="empty-state"><div class="display">Nothing here yet</div>Be the first to post a commitment.</div>`;
     return;
   }
 
@@ -391,9 +462,13 @@ function renderEntry(entry) {
 async function resolveCommitment(id, status) {
   let outcomeNote = null;
   if (status === 'done') {
-    outcomeNote = prompt('Optional: add a note about how it went (leave blank to skip)');
-    if (outcomeNote === null) return; // cancelled
-    if (outcomeNote.trim() === '') outcomeNote = null;
+    outcomeNote = await showPromptModal({
+      title: 'Nice work 🎉',
+      message: 'Want to add a note about how it went? (optional)',
+      placeholder: 'It went well because…',
+      optional: true
+    });
+    if (outcomeNote === '') outcomeNote = null;
   }
   await sb.from('commitments').update({
     status,
@@ -404,10 +479,16 @@ async function resolveCommitment(id, status) {
 }
 
 async function deleteCommitment(id) {
-  if (!confirm('Delete this entry? This cannot be undone.')) return;
+  const confirmed = await showConfirmModal({
+    title: 'Delete this entry?',
+    message: 'This cannot be undone.',
+    confirmLabel: 'Delete',
+    danger: true
+  });
+  if (!confirmed) return;
   const { error } = await sb.from('commitments').delete().eq('id', id);
   if (error) {
-    alert('Could not delete: ' + error.message);
+    await showAlertModal({ title: 'Could not delete', message: error.message });
     return;
   }
   if (state.view === 'feed') renderFeed();
@@ -418,7 +499,7 @@ async function deleteCommitment(id) {
 
 async function renderLeaderboard() {
   const container = document.getElementById('view-content');
-  container.innerHTML = `<div class="empty-state serif">Loading the leaderboard&hellip;</div>`;
+  container.innerHTML = `<div class="empty-state display">Loading the leaderboard&hellip;</div>`;
 
   const { data, error } = await sb
     .from('profiles')
@@ -436,18 +517,27 @@ async function renderLeaderboard() {
 
 function renderLeaderboardTable(rows, emptyMessage) {
   if (!rows || rows.length === 0) {
-    return `<div class="empty-state"><div class="serif">Nothing here yet</div>${emptyMessage}</div>`;
+    return `<div class="empty-state"><div class="display">Nothing here yet</div>${esc(emptyMessage)}</div>`;
   }
+
+  const rankStyles = {
+    1: { bg: '#F0A83B', color: 'white' },   // gold
+    2: { bg: '#C9CDD6', color: 'white' },   // silver
+    3: { bg: '#D8935B', color: 'white' }    // bronze
+  };
 
   return `
     <div class="leaderboard">
       ${rows.map((r, i) => {
         const isMe = r.id === state.user.id;
         const rank = i + 1;
-        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+        const style = rankStyles[rank];
+        const rankBadge = style
+          ? `<div class="lb-rank lb-rank-medal" style="background:${style.bg};color:${style.color};">${rank}</div>`
+          : `<div class="lb-rank">${rank}</div>`;
         return `
           <div class="lb-row ${isMe ? 'lb-me' : ''}">
-            <div class="lb-rank">${medal || rank}</div>
+            ${rankBadge}
             <div class="lb-name">${esc(r.display_name)}${isMe ? ' <span class="lb-you">(you)</span>' : ''}</div>
             <div class="lb-streak">
               <span class="lb-streak-num mono">${r.current_streak || 0}</span>
@@ -474,7 +564,7 @@ async function renderPods() {
 
   const list = document.getElementById('pods-list');
   if (state.pods.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="serif">No pods yet</div>${isAdmin() ? 'Create the first one.' : 'Check back soon — an admin will set these up.'}</div>`;
+    list.innerHTML = `<div class="empty-state"><div class="display">No pods yet</div>${isAdmin() ? 'Create the first one.' : 'Check back soon — an admin will set these up.'}</div>`;
     return;
   }
 
@@ -522,7 +612,7 @@ function showEditPodModal(pod) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-box">
-      <h3 class="modal-title serif">Edit pod</h3>
+      <h3 class="modal-title display">Edit pod</h3>
       <div class="field">
         <label>Name</label>
         <input type="text" id="pod-edit-name" value="${esc(pod.name)}" />
@@ -585,7 +675,7 @@ async function renderPodFeed(pod) {
           <button class="btn btn-primary" id="pod-commit-submit" style="margin-left:auto">Post</button>
         </div>
       </div>
-      <div id="pod-feed-list"><div class="empty-state serif">Loading entries&hellip;</div></div>
+      <div id="pod-feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
     </div>
   `;
 
@@ -621,7 +711,7 @@ async function renderPodFeed(pod) {
       await updateStreak();
       renderPodFeed(pod);
     } else {
-      alert('Could not post: ' + error.message);
+      await showAlertModal({ title: 'Could not post', message: error.message });
     }
   };
 
@@ -642,7 +732,7 @@ async function renderPodFeedContent(pod) {
     return;
   }
   if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="serif">Nothing here yet</div>Be the first to post in ${esc(pod.name)}.</div>`;
+    list.innerHTML = `<div class="empty-state"><div class="display">Nothing here yet</div>Be the first to post in ${esc(pod.name)}.</div>`;
     return;
   }
   list.innerHTML = data.map(entry => renderEntry(entry)).join('');
@@ -651,7 +741,7 @@ async function renderPodFeedContent(pod) {
 
 async function renderPodLeaderboard(pod) {
   const container = document.getElementById('pod-view-content');
-  container.innerHTML = `<div class="empty-state serif">Loading the pod leaderboard&hellip;</div>`;
+  container.innerHTML = `<div class="empty-state display">Loading the pod leaderboard&hellip;</div>`;
 
   const { data: members, error } = await sb
     .from('pod_members')
@@ -676,7 +766,7 @@ function showNewPodModal() {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-box">
-      <h3 class="modal-title serif">New pod</h3>
+      <h3 class="modal-title display">New pod</h3>
       <div class="field">
         <label>Name</label>
         <input type="text" id="pod-name-input" placeholder="Coding accountability squad" />
@@ -736,7 +826,7 @@ async function renderProfile() {
     </div>
     <div id="my-entries">
       ${!mine || mine.length === 0
-        ? `<div class="empty-state"><div class="serif">No entries yet</div>Post your first commitment on the Feed tab.</div>`
+        ? `<div class="empty-state"><div class="display">No entries yet</div>Post your first commitment on the Feed tab.</div>`
         : mine.map(entry => renderEntry({ ...entry, profiles: { display_name: state.profile.display_name } })).join('')}
     </div>
   `;
@@ -754,7 +844,7 @@ function showSettingsModal() {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-box">
-      <h3 class="modal-title serif">Account settings</h3>
+      <h3 class="modal-title display">Account settings</h3>
       <div class="field">
         <label>Display name</label>
         <input type="text" id="settings-name" value="${esc(state.profile.display_name)}" maxlength="40" />
