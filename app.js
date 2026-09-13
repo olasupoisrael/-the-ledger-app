@@ -197,7 +197,7 @@ function renderAuth() {
         state.loading = false;
         render();
       } else {
-        errorBox.innerHTML = `<div class="error-msg" style="background:var(--pine-bg);color:var(--pine)">Check your email to confirm your account, then log in.</div>`;
+        errorBox.innerHTML = `<div class="error-msg" style="background:var(--emerald-bg);color:var(--emerald)">Check your email to confirm your account, then log in.</div>`;
       }
     }
   };
@@ -257,7 +257,7 @@ async function renderFeed() {
           <option value="" ${state.lastUsedPod === '' ? 'selected' : ''}>Public feed</option>
           ${state.pods.filter(p => state.myPodIds.includes(p.id)).map(p => `<option value="${p.id}" ${state.lastUsedPod === p.id ? 'selected' : ''}>${esc(p.name)} (pod only)</option>`).join('')}
         </select>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--stone);">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--violet);">
           <input type="checkbox" id="commit-milestone" style="width:auto;" /> Milestone
         </label>
         <button class="btn btn-primary" id="commit-submit" style="margin-left:auto">Post</button>
@@ -378,8 +378,8 @@ function renderEntry(entry) {
         ${entry.outcome_note ? `<div class="entry-note">${esc(entry.outcome_note)}</div>` : ''}
         <div class="entry-actions">
           ${canResolve ? `
-            <button class="btn btn-sm" id="done-${entry.id}" style="border-color:var(--pine);color:var(--pine)">Mark done</button>
-            <button class="btn btn-sm" id="miss-${entry.id}" style="border-color:var(--brick);color:var(--brick)">Didn't happen</button>
+            <button class="btn btn-sm action-done" id="done-${entry.id}">Mark done</button>
+            <button class="btn btn-sm action-miss" id="miss-${entry.id}">Didn't happen</button>
           ` : ''}
           ${isMine ? `<button class="btn btn-sm btn-delete" id="del-${entry.id}" title="Delete this entry"><i class="ti ti-trash"></i> Delete</button>` : ''}
         </div>
@@ -573,13 +573,13 @@ async function renderPodFeed(pod) {
     </div>
     <div id="pod-view-content">
       <div class="composer">
-        <div class="composer-label">Today I will&hellip; <span style="color:var(--stone)">(in ${esc(pod.name)})</span></div>
+        <div class="composer-label">Today I will&hellip; <span style="color:var(--violet)">(in ${esc(pod.name)})</span></div>
         <textarea id="pod-commit-text" placeholder="Only ${esc(pod.name)} members will see this" rows="2"></textarea>
         <div class="composer-row">
           <select class="cat-select" id="pod-commit-cat">
             ${state.categories.map(c => `<option value="${c.id}">${c.emoji} ${esc(c.name)}</option>`).join('')}
           </select>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--stone);">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--violet);">
             <input type="checkbox" id="pod-commit-milestone" style="width:auto;" /> Milestone
           </label>
           <button class="btn btn-primary" id="pod-commit-submit" style="margin-left:auto">Post</button>
