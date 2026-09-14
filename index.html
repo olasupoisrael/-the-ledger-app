@@ -145,6 +145,50 @@
 
   .tab.active { color: var(--ink); background: var(--paper); box-shadow: var(--shadow-ink); }
 
+  /* ===== BOTTOM NAV (mobile) ===== */
+  .bottom-nav {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .tabs { display: none; }
+
+    .bottom-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--paper);
+      box-shadow: 0 -4px 20px rgba(26,26,46,0.08);
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+      z-index: 40;
+    }
+
+    .bottom-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 4px;
+      background: none;
+      border: none;
+      color: var(--violet);
+      cursor: pointer;
+      border-radius: 12px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .bottom-nav-item i { font-size: 21px; }
+    .bottom-nav-item span { font-size: 10.5px; font-weight: 600; }
+
+    .bottom-nav-item.active { color: var(--coral); }
+    .bottom-nav-item:active { background: var(--violet-bg); }
+
+    #app { padding-bottom: 86px; }
+  }
+
   .auth-wrap { max-width: 400px; margin: 12vh auto 0; }
   .auth-title { font-size: 40px; margin: 0 0 10px; line-height: 1; }
   .auth-sub { color: var(--ink-soft); font-size: 16px; margin: 0 0 32px; line-height: 1.5; }
@@ -432,6 +476,7 @@
 
   .empty-state { text-align: center; padding: 70px 20px; color: var(--violet); }
   .empty-state .display { font-size: 22px; color: var(--ink); margin-bottom: 8px; }
+  .empty-icon { font-size: 32px; color: var(--violet); display: block; margin-bottom: 14px; }
 
   .pod-card {
     border-radius: var(--radius-md);
@@ -552,6 +597,49 @@
   }
 
   .pod-tab.active { color: var(--ink); background: var(--paper); box-shadow: var(--shadow-ink); }
+
+  /* ===== SKELETON LOADERS ===== */
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: 200px 0; }
+  }
+
+  .skel-line, .skel-circle {
+    background: linear-gradient(90deg, var(--violet-bg) 25%, #F0EFF7 37%, var(--violet-bg) 63%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s ease infinite;
+    border-radius: 6px;
+  }
+
+  .skel-entry {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 18px;
+    margin-bottom: 12px;
+    border-radius: var(--radius-md);
+    background: var(--paper);
+    box-shadow: var(--shadow-ink);
+  }
+
+  .skel-circle { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; }
+  .skel-circle-sm { width: 20px; height: 20px; }
+
+  .skel-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .skel-line { height: 14px; }
+  .skel-line-sm { width: 40%; }
+  .skel-line-md { width: 55%; height: 16px; }
+  .skel-line-lg { width: 85%; height: 18px; }
+
+  .skel-lb-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .skeleton-wrap .skel-lb-row:last-child { border-bottom: none; }
 
   .field .csel-trigger {
     width: 100%;

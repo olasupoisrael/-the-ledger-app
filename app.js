@@ -2,7 +2,7 @@ const SUPABASE_URL = 'https://hdwunghgazmbpbhqbbki.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkd3VuZ2hnYXptYnBiaHFiYmtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU2ODEsImV4cCI6MjEwNDg3MTY4MX0.9DU2wGVMnFgONt62Ntb4uIALlcXZQ1gvDuoULcqIZ64';
 
 // IMPORTANT: replace with your own account's email to unlock admin (pod creation) features
-const ADMIN_EMAILS = ["israelolasupo26@gmail.com"];
+const ADMIN_EMAILS = ["Israelolasupo26@gmail.com"];
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -224,6 +224,39 @@ function isAdmin() {
   return state.user && ADMIN_EMAILS.includes(state.user.email);
 }
 
+// ===== SKELETON LOADERS =====
+
+function skeletonEntries(count = 3) {
+  return `
+    <div class="skeleton-wrap">
+      ${Array.from({ length: count }).map(() => `
+        <div class="skel skel-entry">
+          <div class="skel-circle"></div>
+          <div class="skel-lines">
+            <div class="skel-line skel-line-sm"></div>
+            <div class="skel-line skel-line-lg"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function skeletonLeaderboard(count = 5) {
+  return `
+    <div class="leaderboard skeleton-wrap">
+      ${Array.from({ length: count }).map(() => `
+        <div class="skel skel-lb-row">
+          <div class="skel-circle skel-circle-sm"></div>
+          <div class="skel-line skel-line-md"></div>
+          <div class="skel-line skel-line-sm" style="margin-left:auto;"></div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+
 async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
@@ -387,6 +420,13 @@ function renderAuth() {
 
 function renderApp() {
   const streak = state.profile ? state.profile.current_streak : 0;
+  const navItems = [
+    { view: 'feed', label: 'Feed', icon: 'ti-list-check' },
+    { view: 'pods', label: 'Pods', icon: 'ti-users' },
+    { view: 'leaderboard', label: 'Ranks', icon: 'ti-trophy' },
+    { view: 'profile', label: 'Profile', icon: 'ti-user-circle' }
+  ];
+
   app.innerHTML = `
     <div class="site-header">
       <div>
@@ -394,6 +434,7 @@ function renderApp() {
       </div>
       <div class="header-right">
         <div class="streak-badge">
+          <i class="ti ti-flame flame"></i>
           <div class="streak-num mono">${streak}</div>
           <div class="streak-label">day streak</div>
         </div>
@@ -401,19 +442,24 @@ function renderApp() {
       </div>
     </div>
     <div class="tabs">
-      <button class="tab ${state.view === 'feed' ? 'active' : ''}" data-view="feed">Feed</button>
-      <button class="tab ${state.view === 'pods' ? 'active' : ''}" data-view="pods">Pods</button>
-      <button class="tab ${state.view === 'leaderboard' ? 'active' : ''}" data-view="leaderboard">Leaderboard</button>
-      <button class="tab ${state.view === 'profile' ? 'active' : ''}" data-view="profile">Profile</button>
+      ${navItems.map(n => `<button class="tab ${state.view === n.view ? 'active' : ''}" data-view="${n.view}">${n.label}</button>`).join('')}
     </div>
     <div id="view-content"></div>
+    <nav class="bottom-nav">
+      ${navItems.map(n => `
+        <button class="bottom-nav-item ${state.view === n.view ? 'active' : ''}" data-view="${n.view}">
+          <i class="ti ${n.icon}"></i>
+          <span>${n.label}</span>
+        </button>
+      `).join('')}
+    </nav>
   `;
 
   document.getElementById('logout-btn').onclick = async () => {
     await sb.auth.signOut();
   };
 
-  document.querySelectorAll('.tab').forEach(t => {
+  document.querySelectorAll('.tab, .bottom-nav-item').forEach(t => {
     t.onclick = () => { state.view = t.dataset.view; render(); };
   });
 
@@ -451,7 +497,7 @@ async function renderFeed() {
       </div>
     </div>
     <div class="feed-filters" id="feed-filters"></div>
-    <div id="feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
+    <div id="feed-list">${skeletonEntries(3)}</div>
   `;
 
   wireCustomSelect({ id: 'commit-cat', options: catOptions, getValue: () => selectedCat, onChange: (v) => { selectedCat = v; } });
@@ -517,12 +563,17 @@ async function loadFeedEntries() {
   const list = document.getElementById('feed-list');
 
   if (error) {
-    list.innerHTML = `<div class="empty-state">Could not load the feed.</div>`;
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-wifi-off empty-icon"></i><div class="display">Couldn't load the feed</div>Check your connection and try refreshing.</div>`;
     return;
   }
 
   if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="display">Nothing here yet</div>Be the first to post a commitment.</div>`;
+    if (state.feedFilter.category) {
+      const catName = (state.categories.find(c => c.id === state.feedFilter.category) || {}).name || 'this category';
+      list.innerHTML = `<div class="empty-state"><i class="ti ti-filter-off empty-icon"></i><div class="display">No ${esc(catName)} entries yet</div>Try a different category, or post the first one.</div>`;
+    } else {
+      list.innerHTML = `<div class="empty-state"><i class="ti ti-flag-3 empty-icon"></i><div class="display">Your feed starts here</div>Write down something you'll do today, then come back and mark it off.</div>`;
+    }
     return;
   }
 
@@ -618,7 +669,7 @@ async function deleteCommitment(id) {
 
 async function renderLeaderboard() {
   const container = document.getElementById('view-content');
-  container.innerHTML = `<div class="empty-state display">Loading the leaderboard&hellip;</div>`;
+  container.innerHTML = skeletonLeaderboard(6);
 
   const { data, error } = await sb
     .from('profiles')
@@ -627,7 +678,7 @@ async function renderLeaderboard() {
     .limit(50);
 
   if (error) {
-    container.innerHTML = `<div class="empty-state">Could not load the leaderboard.</div>`;
+    container.innerHTML = `<div class="empty-state"><i class="ti ti-wifi-off empty-icon"></i><div class="display">Couldn't load the leaderboard</div>Check your connection and try again.</div>`;
     return;
   }
 
@@ -636,7 +687,7 @@ async function renderLeaderboard() {
 
 function renderLeaderboardTable(rows, emptyMessage) {
   if (!rows || rows.length === 0) {
-    return `<div class="empty-state"><div class="display">Nothing here yet</div>${esc(emptyMessage)}</div>`;
+    return `<div class="empty-state"><i class="ti ti-trophy empty-icon"></i><div class="display">The board is empty</div>${esc(emptyMessage)}</div>`;
   }
 
   const rankStyles = {
@@ -683,7 +734,7 @@ async function renderPods() {
 
   const list = document.getElementById('pods-list');
   if (state.pods.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="display">No pods yet</div>${isAdmin() ? 'Create the first one.' : 'Check back soon — an admin will set these up.'}</div>`;
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-users-group empty-icon"></i><div class="display">No pods yet</div>${isAdmin() ? 'Create one to start a smaller circle of accountability.' : 'Check back soon — an admin will set these up.'}</div>`;
     return;
   }
 
@@ -795,7 +846,7 @@ async function renderPodFeed(pod) {
           <button class="btn btn-primary" id="pod-commit-submit" style="margin-left:auto">Post</button>
         </div>
       </div>
-      <div id="pod-feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
+      <div id="pod-feed-list">${skeletonEntries(2)}</div>
     </div>
   `;
 
@@ -850,11 +901,11 @@ async function renderPodFeedContent(pod) {
   const list = document.getElementById('pod-feed-list');
   if (!list) return; // user may have switched tabs already
   if (error) {
-    list.innerHTML = `<div class="empty-state">Could not load this pod's feed.</div>`;
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-wifi-off empty-icon"></i><div class="display">Couldn't load this pod's feed</div>Check your connection and try refreshing.</div>`;
     return;
   }
   if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="display">Nothing here yet</div>Be the first to post in ${esc(pod.name)}.</div>`;
+    list.innerHTML = `<div class="empty-state"><i class="ti ti-users empty-icon"></i><div class="display">Quiet in here</div>Be the first to post in ${esc(pod.name)}.</div>`;
     return;
   }
   list.innerHTML = data.map(entry => renderEntry(entry)).join('');
@@ -863,7 +914,7 @@ async function renderPodFeedContent(pod) {
 
 async function renderPodLeaderboard(pod) {
   const container = document.getElementById('pod-view-content');
-  container.innerHTML = `<div class="empty-state display">Loading the pod leaderboard&hellip;</div>`;
+  container.innerHTML = skeletonLeaderboard(4);
 
   const { data: members, error } = await sb
     .from('pod_members')
@@ -871,7 +922,7 @@ async function renderPodLeaderboard(pod) {
     .eq('pod_id', pod.id);
 
   if (error) {
-    container.innerHTML = `<div class="empty-state">Could not load this pod's leaderboard.</div>`;
+    container.innerHTML = `<div class="empty-state"><i class="ti ti-wifi-off empty-icon"></i><div class="display">Couldn't load this leaderboard</div>Check your connection and try again.</div>`;
     return;
   }
 
@@ -948,12 +999,14 @@ async function renderProfile() {
     </div>
     <div id="my-entries">
       ${!mine || mine.length === 0
-        ? `<div class="empty-state"><div class="display">No entries yet</div>Post your first commitment on the Feed tab.</div>`
+        ? `<div class="empty-state"><i class="ti ti-notebook empty-icon"></i><div class="display">Your history starts here</div>Everything you commit to will show up in this list.<br><button class="btn btn-primary" id="go-to-feed" style="margin-top:16px;">Post your first commitment</button></div>`
         : mine.map(entry => renderEntry({ ...entry, profiles: { display_name: state.profile.display_name } })).join('')}
     </div>
   `;
 
   document.getElementById('open-settings').onclick = showSettingsModal;
+  const goToFeedBtn = document.getElementById('go-to-feed');
+  if (goToFeedBtn) goToFeedBtn.onclick = () => { state.view = 'feed'; renderApp(); };
 
   if (mine && mine.length > 0) wireEntryActions(mine);
 }
