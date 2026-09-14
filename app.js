@@ -2,7 +2,7 @@ const SUPABASE_URL = 'https://hdwunghgazmbpbhqbbki.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkd3VuZ2hnYXptYnBiaHFiYmtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU2ODEsImV4cCI6MjEwNDg3MTY4MX0.9DU2wGVMnFgONt62Ntb4uIALlcXZQ1gvDuoULcqIZ64';
 
 // IMPORTANT: replace with your own account's email to unlock admin (pod creation) features
-const ADMIN_EMAILS = ["Israelolasupo26@gmail.com"];
+const ADMIN_EMAILS = ['israelolasupo26@gmail.com'];
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -595,7 +595,7 @@ function wireEntryActions(data) {
 }
 
 function renderEntry(entry) {
-  const name = entry.profiles ? entry.profiles.display_name : 'Someone';
+  const name = entry.user_id === null ? 'Deleted user' : (entry.profiles ? entry.profiles.display_name : 'Someone');
   const cat = entry.categories || {};
   const isMine = entry.user_id === state.user.id;
   const canResolve = isMine && entry.status === 'pending';
@@ -1046,6 +1046,12 @@ function showSettingsModal() {
         <button class="btn" id="settings-cancel">Cancel</button>
         <button class="btn btn-primary" id="settings-save">Save</button>
       </div>
+      <div class="danger-zone">
+        <div class="danger-zone-label">Danger zone</div>
+        <button class="btn btn-delete" id="open-delete-account" style="width:100%;">
+          <i class="ti ti-alert-triangle"></i> Delete account
+        </button>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1089,6 +1095,87 @@ function showSettingsModal() {
     state.profile.reminder_enabled = enabled;
     overlay.remove();
     renderApp(); // refresh header name + profile view
+  };
+
+  document.getElementById('open-delete-account').onclick = () => showDeleteAccountModal();
+}
+
+function showDeleteAccountModal() {
+  const userEmail = state.user.email;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3 class="modal-title display">Delete your account?</h3>
+      <p style="color:var(--ink-soft);font-size:14px;line-height:1.5;margin:0 0 14px;">
+        This permanently deletes your login and profile. Your past commitments stay visible to others (shown as "Deleted user") so shared feeds and pods aren't left with gaps — but you'll lose access immediately and can't undo this.
+      </p>
+      <p style="color:var(--ink-soft);font-size:14px;line-height:1.5;margin:0 0 14px;">
+        You can always sign up again later with the same email if you change your mind.
+      </p>
+      <div class="field">
+        <label>Type your email to confirm: <strong>${esc(userEmail)}</strong></label>
+        <input type="email" id="delete-confirm-email" placeholder="${esc(userEmail)}" autocomplete="off" />
+      </div>
+      <div id="delete-error"></div>
+      <div class="modal-actions">
+        <button class="btn" id="delete-cancel">Cancel</button>
+        <button class="btn btn-delete" id="delete-confirm-btn" disabled style="opacity:0.5;">
+          <i class="ti ti-trash"></i> Permanently delete
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = document.getElementById('delete-confirm-email');
+  const confirmBtn = document.getElementById('delete-confirm-btn');
+
+  input.oninput = () => {
+    const matches = input.value.trim().toLowerCase() === userEmail.toLowerCase();
+    confirmBtn.disabled = !matches;
+    confirmBtn.style.opacity = matches ? '1' : '0.5';
+  };
+
+  document.getElementById('delete-cancel').onclick = () => overlay.remove();
+
+  confirmBtn.onclick = async () => {
+    const errorBox = document.getElementById('delete-error');
+    errorBox.innerHTML = '';
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Deleting…';
+
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const accessToken = session ? session.access_token : null;
+
+      if (!accessToken) {
+        throw new Error('Session expired. Please log in again and retry.');
+      }
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await res.json();
+
+      if (!res.ok || result.error) {
+        throw new Error(result.error || 'Something went wrong deleting your account.');
+      }
+
+      // Success: sign out locally and return to the auth screen
+      overlay.remove();
+      await sb.auth.signOut();
+    } catch (err) {
+      errorBox.innerHTML = `<div class="error-msg">${esc(err.message)}</div>`;
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Permanently delete';
+    }
   };
 }
 
