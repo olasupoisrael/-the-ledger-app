@@ -2,7 +2,7 @@ const SUPABASE_URL = 'https://hdwunghgazmbpbhqbbki.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkd3VuZ2hnYXptYnBiaHFiYmtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU2ODEsImV4cCI6MjEwNDg3MTY4MX0.9DU2wGVMnFgONt62Ntb4uIALlcXZQ1gvDuoULcqIZ64';
 
 // IMPORTANT: replace with your own account's email to unlock admin (pod creation) features
-const ADMIN_EMAILS = ['israelolasupo26@gmail.com'];
+const ADMIN_EMAILS = ["israelolasupo26@gmail.com"];
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -1097,10 +1097,10 @@ function showSettingsModal() {
     renderApp(); // refresh header name + profile view
   };
 
-  document.getElementById('open-delete-account').onclick = () => showDeleteAccountModal();
+  document.getElementById('open-delete-account').onclick = () => showDeleteAccountModal(overlay);
 }
 
-function showDeleteAccountModal() {
+function showDeleteAccountModal(settingsOverlay) {
   const userEmail = state.user.email;
 
   const overlay = document.createElement('div');
@@ -1168,8 +1168,10 @@ function showDeleteAccountModal() {
         throw new Error(result.error || 'Something went wrong deleting your account.');
       }
 
-      // Success: sign out locally and return to the auth screen
+      // Success: close both this modal and the settings modal underneath it,
+      // then sign out locally so the app returns to the login screen.
       overlay.remove();
+      if (settingsOverlay) settingsOverlay.remove();
       await sb.auth.signOut();
     } catch (err) {
       errorBox.innerHTML = `<div class="error-msg">${esc(err.message)}</div>`;
