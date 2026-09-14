@@ -98,6 +98,117 @@ function showAlertModal({ title = 'Something went wrong', message }) {
   });
 }
 
+// ===== CUSTOM SELECT (replaces native <select> everywhere) =====
+// Renders a styled trigger button + floating option panel. Supports
+// click, tap, arrow-key navigation, Enter/Escape, and click-outside-to-close.
+
+let customSelectCounter = 0;
+const openCustomSelects = new Set();
+
+function closeAllCustomSelects(exceptId) {
+  openCustomSelects.forEach(id => {
+    if (id === exceptId) return;
+    const panel = document.getElementById(`csel-panel-${id}`);
+    const trigger = document.getElementById(`csel-trigger-${id}`);
+    if (panel) panel.classList.remove('open');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+  });
+  openCustomSelects.forEach(id => { if (id !== exceptId) openCustomSelects.delete(id); });
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.csel')) closeAllCustomSelects();
+});
+
+/**
+ * Renders a custom select's HTML. Call renderCustomSelect() to get markup,
+ * insert it, then call wireCustomSelect() with the same id + options to
+ * attach behavior. onChange receives the selected option's value.
+ */
+function renderCustomSelect({ id, options, value, placeholder = 'Select…' }) {
+  const selected = options.find(o => String(o.value) === String(value));
+  const label = selected ? selected.label : placeholder;
+  return `
+    <div class="csel" data-csel-id="${id}">
+      <button type="button" class="csel-trigger" id="csel-trigger-${id}" aria-haspopup="listbox" aria-expanded="false">
+        <span class="csel-trigger-label">${esc(label)}</span>
+        <i class="ti ti-chevron-down csel-chevron"></i>
+      </button>
+      <div class="csel-panel" id="csel-panel-${id}" role="listbox">
+        ${options.map(o => `
+          <div class="csel-option ${String(o.value) === String(value) ? 'selected' : ''}" role="option" data-value="${esc(String(o.value))}" tabindex="-1">${esc(o.label)}</div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function wireCustomSelect({ id, options, getValue, onChange }) {
+  const trigger = document.getElementById(`csel-trigger-${id}`);
+  const panel = document.getElementById(`csel-panel-${id}`);
+  if (!trigger || !panel) return;
+
+  let highlighted = -1;
+
+  const setOpen = (open) => {
+    if (open) {
+      closeAllCustomSelects(id);
+      panel.classList.add('open');
+      trigger.setAttribute('aria-expanded', 'true');
+      openCustomSelects.add(id);
+      const currentVal = String(getValue());
+      highlighted = options.findIndex(o => String(o.value) === currentVal);
+      updateHighlight();
+    } else {
+      panel.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+      openCustomSelects.delete(id);
+    }
+  };
+
+  const updateHighlight = () => {
+    const opts = panel.querySelectorAll('.csel-option');
+    opts.forEach((el, i) => el.classList.toggle('highlighted', i === highlighted));
+    if (opts[highlighted]) opts[highlighted].scrollIntoView({ block: 'nearest' });
+  };
+
+  const selectValue = (val) => {
+    const opt = options.find(o => String(o.value) === String(val));
+    if (!opt) return;
+    trigger.querySelector('.csel-trigger-label').textContent = opt.label;
+    panel.querySelectorAll('.csel-option').forEach(el => {
+      el.classList.toggle('selected', el.dataset.value === String(val));
+    });
+    onChange(opt.value);
+    setOpen(false);
+  };
+
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  };
+
+  trigger.onkeydown = (e) => {
+    if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Escape'].includes(e.key)) e.preventDefault();
+    if (!panel.classList.contains('open') && ['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+      setOpen(true);
+      return;
+    }
+    if (e.key === 'ArrowDown') { highlighted = Math.min(highlighted + 1, options.length - 1); updateHighlight(); }
+    else if (e.key === 'ArrowUp') { highlighted = Math.max(highlighted - 1, 0); updateHighlight(); }
+    else if (e.key === 'Enter' && highlighted >= 0) { selectValue(options[highlighted].value); }
+    else if (e.key === 'Escape') { setOpen(false); }
+  };
+
+  panel.querySelectorAll('.csel-option').forEach(el => {
+    el.onclick = (e) => { e.stopPropagation(); selectValue(el.dataset.value); };
+    el.onmouseenter = () => {
+      highlighted = Array.from(panel.querySelectorAll('.csel-option')).indexOf(el);
+      updateHighlight();
+    };
+  });
+}
+
 
 function timeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -316,18 +427,23 @@ function renderApp() {
 
 async function renderFeed() {
   const container = document.getElementById('view-content');
+
+  const catOptions = state.categories.map(c => ({ value: c.id, label: `${c.emoji} ${c.name}` }));
+  const podOptions = [
+    { value: '', label: 'Public feed' },
+    ...state.pods.filter(p => state.myPodIds.includes(p.id)).map(p => ({ value: p.id, label: `${p.name} (pod only)` }))
+  ];
+
+  let selectedCat = state.lastUsedCat != null ? state.lastUsedCat : (state.categories[0] && state.categories[0].id);
+  let selectedPod = state.lastUsedPod || '';
+
   container.innerHTML = `
     <div class="composer">
       <div class="composer-label">Today I will&hellip;</div>
       <textarea id="commit-text" placeholder="Read chapter 4 of Atomic Habits" rows="2"></textarea>
       <div class="composer-row">
-        <select class="cat-select" id="commit-cat">
-          ${state.categories.map(c => `<option value="${c.id}" ${state.lastUsedCat === c.id ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('')}
-        </select>
-        <select class="pod-select" id="commit-pod">
-          <option value="" ${state.lastUsedPod === '' ? 'selected' : ''}>Public feed</option>
-          ${state.pods.filter(p => state.myPodIds.includes(p.id)).map(p => `<option value="${p.id}" ${state.lastUsedPod === p.id ? 'selected' : ''}>${esc(p.name)} (pod only)</option>`).join('')}
-        </select>
+        ${renderCustomSelect({ id: 'commit-cat', options: catOptions, value: selectedCat })}
+        ${renderCustomSelect({ id: 'commit-pod', options: podOptions, value: selectedPod })}
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--violet);">
           <input type="checkbox" id="commit-milestone" style="width:auto;" /> Milestone
         </label>
@@ -337,6 +453,9 @@ async function renderFeed() {
     <div class="feed-filters" id="feed-filters"></div>
     <div id="feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
   `;
+
+  wireCustomSelect({ id: 'commit-cat', options: catOptions, getValue: () => selectedCat, onChange: (v) => { selectedCat = v; } });
+  wireCustomSelect({ id: 'commit-pod', options: podOptions, getValue: () => selectedPod, onChange: (v) => { selectedPod = v; } });
 
   const filters = document.getElementById('feed-filters');
   filters.innerHTML = `
@@ -353,8 +472,8 @@ async function renderFeed() {
   document.getElementById('commit-submit').onclick = async () => {
     const text = document.getElementById('commit-text').value.trim();
     if (!text) return;
-    const catId = parseInt(document.getElementById('commit-cat').value);
-    const podId = document.getElementById('commit-pod').value || null;
+    const catId = parseInt(selectedCat);
+    const podId = selectedPod || null;
     const isMilestone = document.getElementById('commit-milestone').checked;
 
     state.lastUsedCat = catId;
@@ -655,6 +774,9 @@ function showEditPodModal(pod) {
 
 async function renderPodFeed(pod) {
   const container = document.getElementById('view-content');
+  const catOptions = state.categories.map(c => ({ value: c.id, label: `${c.emoji} ${c.name}` }));
+  let podSelectedCat = state.categories[0] && state.categories[0].id;
+
   container.innerHTML = `
     <button class="btn btn-sm btn-ghost" id="back-to-pods" style="margin-bottom:16px;"><i class="ti ti-arrow-left"></i> All pods</button>
     <div class="pod-tabs">
@@ -666,9 +788,7 @@ async function renderPodFeed(pod) {
         <div class="composer-label">Today I will&hellip; <span style="color:var(--violet)">(in ${esc(pod.name)})</span></div>
         <textarea id="pod-commit-text" placeholder="Only ${esc(pod.name)} members will see this" rows="2"></textarea>
         <div class="composer-row">
-          <select class="cat-select" id="pod-commit-cat">
-            ${state.categories.map(c => `<option value="${c.id}">${c.emoji} ${esc(c.name)}</option>`).join('')}
-          </select>
+          ${renderCustomSelect({ id: 'pod-commit-cat', options: catOptions, value: podSelectedCat })}
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--violet);">
             <input type="checkbox" id="pod-commit-milestone" style="width:auto;" /> Milestone
           </label>
@@ -678,6 +798,8 @@ async function renderPodFeed(pod) {
       <div id="pod-feed-list"><div class="empty-state display">Loading entries&hellip;</div></div>
     </div>
   `;
+
+  wireCustomSelect({ id: 'pod-commit-cat', options: catOptions, getValue: () => podSelectedCat, onChange: (v) => { podSelectedCat = v; } });
 
   document.getElementById('back-to-pods').onclick = renderPods;
 
@@ -696,7 +818,7 @@ async function renderPodFeed(pod) {
   document.getElementById('pod-commit-submit').onclick = async () => {
     const text = document.getElementById('pod-commit-text').value.trim();
     if (!text) return;
-    const catId = parseInt(document.getElementById('pod-commit-cat').value);
+    const catId = parseInt(podSelectedCat);
     const isMilestone = document.getElementById('pod-commit-milestone').checked;
 
     const { error } = await sb.from('commitments').insert({
@@ -839,6 +961,9 @@ async function renderProfile() {
 function showSettingsModal() {
   const currentTime = (state.profile.reminder_time || '20:00:00').slice(0, 5);
   const enabled = state.profile.reminder_enabled !== false;
+  const tzList = ['Africa/Lagos','Africa/Cairo','Africa/Nairobi','Africa/Johannesburg','Europe/London','America/New_York','America/Los_Angeles','Asia/Dubai','Asia/Kolkata','Asia/Singapore'];
+  const tzOptions = tzList.map(tz => ({ value: tz, label: tz.replace('_', ' ') }));
+  let selectedTz = state.profile.timezone || tzList[0];
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -861,11 +986,7 @@ function showSettingsModal() {
       </div>
       <div class="field">
         <label>Timezone</label>
-        <select id="settings-tz">
-          ${['Africa/Lagos','Africa/Cairo','Africa/Nairobi','Africa/Johannesburg','Europe/London','America/New_York','America/Los_Angeles','Asia/Dubai','Asia/Kolkata','Asia/Singapore'].map(tz =>
-            `<option value="${tz}" ${state.profile.timezone === tz ? 'selected' : ''}>${tz.replace('_',' ')}</option>`
-          ).join('')}
-        </select>
+        ${renderCustomSelect({ id: 'settings-tz', options: tzOptions, value: selectedTz })}
       </div>
       <div id="settings-error"></div>
       <div class="modal-actions">
@@ -875,11 +996,13 @@ function showSettingsModal() {
     </div>
   `;
   document.body.appendChild(overlay);
+  wireCustomSelect({ id: 'settings-tz', options: tzOptions, getValue: () => selectedTz, onChange: (v) => { selectedTz = v; } });
+
   document.getElementById('settings-cancel').onclick = () => overlay.remove();
   document.getElementById('settings-save').onclick = async () => {
     const name = document.getElementById('settings-name').value.trim();
     const time = document.getElementById('settings-time').value || '20:00';
-    const tz = document.getElementById('settings-tz').value;
+    const tz = selectedTz;
     const enabled = document.getElementById('settings-enabled').checked;
     const errorBox = document.getElementById('settings-error');
     errorBox.innerHTML = '';
